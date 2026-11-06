@@ -1,0 +1,125 @@
+{# Login page — authenticates via identidad (cross-service). #}
+{% extends "base.html" %}
+
+{% block title %}{{ service_name }} — Login{% endblock %}
+
+{% block body %}
+<div id="login-page" class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl mb-4" style="background: var(--color-accent-soft);">
+        <i data-lucide="{{ service_icon }}" class="w-7 h-7" style="color: var(--color-accent);"></i>
+      </div>
+      <h1 class="text-2xl font-bold tracking-tight">{{ service_name }}</h1>
+      <p class="text-sm mt-1" style="color: var(--color-text-muted);">Panel de administración</p>
+    </div>
+
+    <form id="login-form" class="card p-6 space-y-4">
+      <div>
+        <label class="block text-xs font-medium uppercase tracking-wider mb-1.5" style="color: var(--color-text-muted);">Usuario</label>
+        <input
+          class="input"
+          type="text"
+          id="username"
+          name="username"
+          autocomplete="username"
+          spellcheck="false"
+          placeholder="Nombre de usuario…"
+          required
+        />
+      </div>
+      <div>
+        <label class="block text-xs font-medium uppercase tracking-wider mb-1.5" style="color: var(--color-text-muted);">Contraseña</label>
+        <input
+          class="input"
+          type="password"
+          id="password"
+          name="password"
+          autocomplete="current-password"
+          placeholder="Contraseña…"
+          required
+        />
+      </div>
+      <div id="login-error" class="hidden text-sm font-medium rounded-lg px-3 py-2" style="background: var(--color-error-soft); color: var(--color-error);"></div>
+      <button id="btn-login" type="submit" class="btn btn-primary w-full justify-center">
+        <span id="btn-text">Ingresar</span>
+        <span id="btn-spinner" class="hidden items-center gap-2">
+          <i data-lucide="loader-circle" class="w-4 h-4 animate-spin" aria-hidden="true"></i>
+          Iniciando sesión…
+        </span>
+      </button>
+    </form>
+
+    <p class="text-center text-xs mt-6" style="color: var(--color-text-muted);">
+      Conecta al servicio de identidad para autenticarse.
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const BASE = {{ base | tojson }};
+  // Browser-reachable identity API (IDENTITY_EXTERNAL_URL, else IDENTITY_SERVICE_URL).
+  const IDENTITY_BASE = {{ identity_base | tojson }};
+  const IDENTITY_URL = IDENTITY_BASE + '/login';
+  const TOKEN_KEY = 'pz_token';
+  const USER_KEY = 'pz_user';
+
+  if (localStorage.getItem(TOKEN_KEY)) {
+    window.location.href = BASE + '/dashboard/';
+  }
+
+  document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const user = document.getElementById('username').value.trim();
+    const pass = document.getElementById('password').value;
+    const errorEl = document.getElementById('login-error');
+    const btn = document.getElementById('btn-login');
+    errorEl.classList.add('hidden');
+
+    btn.disabled = true;
+    document.getElementById('btn-text').classList.add('hidden');
+    const spinner = document.getElementById('btn-spinner');
+    spinner.classList.remove('hidden');
+    spinner.classList.add('flex');
+
+    try {
+      const body = new URLSearchParams({ username: user, password: pass });
+      const resp = await fetch(IDENTITY_URL, {
+        method: 'POST',
+        body: body,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+
+      if (resp.ok) {
+        const data = await resp.json();
+        localStorage.setItem(TOKEN_KEY, data.access_token);
+        const meResp = await fetch(IDENTITY_BASE + '/me', {
+          headers: { 'Authorization': 'Bearer ' + data.access_token },
+        });
+        if (meResp && meResp.ok) {
+          const meData = await meResp.json();
+          localStorage.setItem(USER_KEY, JSON.stringify(meData));
+        } else {
+          localStorage.setItem(USER_KEY, JSON.stringify({ userName: user, role: 'admin' }));
+        }
+        window.location.href = BASE + '/dashboard/';
+      } else {
+        const err = await resp.json().catch(() => ({}));
+        errorEl.textContent = err.detail || 'Credenciales incorrectas';
+        errorEl.classList.remove('hidden');
+      }
+    } catch (err) {
+      errorEl.textContent = 'No se pudo conectar al servicio de identidad';
+      errorEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      document.getElementById('btn-text').classList.remove('hidden');
+      const spinner = document.getElementById('btn-spinner');
+      spinner.classList.add('hidden');
+      spinner.classList.remove('flex');
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+{# Auth JS — token management & API fetch for Pólizas.
+   Authenticates via identidad (cross-service).
+   Uses pz_token / pz_user localStorage keys. #}
+<script>
+  const API_BASE = BASE + '/api/v1';
+
+  function getToken() { return localStorage.getItem('pz_token'); }
+  function setToken(t) { localStorage.setItem('pz_token', t); }
+  function clearToken() { localStorage.removeItem('pz_token'); localStorage.removeItem('pz_user'); }
+
+  function getUser() {
+    try { return JSON.parse(localStorage.getItem('pz_user')); } catch { return null; }
+  }
+
+  async function apiFetch(path, opts = {}) {
+    const token = getToken();
+    if (!token) { goLogin(); return null; }
+    const maxRetries = opts._retries ?? 3;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { _retries: _r, ...fetchOpts } = opts;
+        const resp = await fetch(API_BASE + path, {
+          ...fetchOpts,
+          headers: {
+            'Authorization': 'Bearer ' + token,
+            'Accept': 'application/json',
+            ...(opts.headers || {}),
+          },
+        });
+        if (resp.status === 401 || resp.status === 403) { goLogin(); return null; }
+        if ((resp.status === 502 || resp.status === 503) && attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt - 1), 8000)));
+          continue;
+        }
+        return resp;
+      } catch (err) {
+        if (attempt < maxRetries) {
+          await new Promise(r => setTimeout(r, Math.min(1000 * Math.pow(2, attempt - 1), 8000)));
+          continue;
+        }
+        console.error('apiFetch failed after retries:', err);
+        return null;
+      }
+    }
+    return null;
+  }
+
+  function goLogin() {
+    clearToken();
+    window.location.href = BASE + '/dashboard/login';
+  }
+
+  function logout() { goLogin(); }
+
+  function refreshCurrentPage() { window.location.reload(); }
+
+  // Shell init — user info in sidebar
+  (function initShell() {
+    if (!getToken()) { goLogin(); return; }
+    const user = getUser();
+    if (user) {
+      const nameEl = document.getElementById('user-name');
+      const roleEl = document.getElementById('user-role');
+      const initEl = document.getElementById('user-initials');
+      if (nameEl) nameEl.textContent = user.userName || 'Admin';
+      if (roleEl) roleEl.textContent = user.role || 'admin';
+      if (initEl) initEl.textContent = (user.userName || 'A')[0].toUpperCase();
+    }
+  })();
+</script>

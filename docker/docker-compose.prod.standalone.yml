@@ -1,0 +1,64 @@
+# ============================================================================
+# Polizas Service - Docker Compose (Production Standalone)
+# ============================================================================
+
+name: polizas
+
+services:
+  polizas:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prod
+    image: polizas-api:${PROJECT_VERSION:-latest}
+    container_name: polizas_api
+    ports:
+      - "${API_PORT:-8082}:8000"
+    env_file:
+      - ../.env
+    environment:
+      - DEBUG=false
+      # Redis on the compose network
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    volumes:
+      - polizas_logs:/app/logs
+      # Host folder where the policies share is mounted (e.g. \\fileserver\policies
+      # via CIFS), read-only. LOCAL_PATH_PREFIX must match the container path.
+      - ${POLICIES_PDF_HOST_PATH:-/media/polizas}:/media/polizas:ro
+    networks:
+      - polizas-internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: polizas_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - polizas_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - polizas-internal
+
+networks:
+  polizas-internal:
+    driver: bridge
+
+volumes:
+  polizas_redis_data:
+    name: polizas_redis_data
+  polizas_logs:
+    name: polizas_logs

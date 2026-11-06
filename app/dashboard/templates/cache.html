@@ -1,0 +1,610 @@
+{# Cache management — Estadísticas | Diagnóstico | Gestión. #}
+{% extends "shell.html" %}
+{% block page_title %}Caché{% endblock %}
+
+{% block page_content %}
+
+<!-- Tab nav -->
+<div class="flex gap-1 mb-5 border-b" style="border-color: var(--color-border-subtle);">
+  <button class="tab-btn active" data-tab="stats" onclick="switchTab('stats')">
+    <i data-lucide="bar-chart-2" class="w-3.5 h-3.5"></i> Estadísticas
+  </button>
+  <button class="tab-btn" data-tab="diag" onclick="switchTab('diag')">
+    <i data-lucide="search" class="w-3.5 h-3.5"></i> Diagnóstico
+    <span id="diag-badge" class="ml-1.5 text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full hidden" style="background: var(--color-error); color: #fff;"></span>
+  </button>
+  <button class="tab-btn" data-tab="mgmt" onclick="switchTab('mgmt')">
+    <i data-lucide="settings-2" class="w-3.5 h-3.5"></i> Gestión
+  </button>
+</div>
+
+<!-- =====================================================================
+     TAB: Estadísticas
+     ===================================================================== -->
+<div id="tab-stats">
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--color-text-muted);">Estadísticas de caché</h3>
+      <button onclick="loadCacheStats()" class="btn btn-secondary px-3 py-1.5 text-xs">
+        <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Actualizar
+      </button>
+    </div>
+    <div id="cache-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Pólizas</span>
+          <i data-lucide="scroll-text" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line" id="cs-policies">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Fechas únicas</span>
+          <i data-lucide="calendar" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line" id="cs-dates">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Productores</span>
+          <i data-lucide="briefcase" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line" id="cs-producers">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Última sync</span>
+          <i data-lucide="clock" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line text-sm" id="cs-last-sync">—</div>
+      </div>
+    </div>
+
+    <!-- File coverage row -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Archivos disponibles</span>
+          <i data-lucide="file-check" class="w-4 h-4" style="color: var(--color-success);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line text-sm" id="cs-available">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>En storage</span>
+          <i data-lucide="cloud" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line text-sm" id="cs-in-storage">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Pendientes de subir</span>
+          <i data-lucide="cloud-upload" class="w-4 h-4" style="color: var(--color-warning);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line text-sm" id="cs-pending">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Cobertura storage</span>
+          <i data-lucide="percent" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value skeleton-line text-sm" id="cs-coverage">—</div>
+      </div>
+    </div>
+
+    <!-- Raw JSON -->
+    <div id="cache-extra" class="mt-4 hidden">
+      <details>
+        <summary class="text-xs font-medium cursor-pointer" style="color: var(--color-text-muted);">Ver datos crudos</summary>
+        <pre id="cache-raw" class="text-xs font-mono mt-2 p-3 rounded-lg overflow-x-auto" style="background: var(--color-bg-tertiary); color: var(--color-text-secondary);"></pre>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- =====================================================================
+     TAB: Diagnóstico
+     ===================================================================== -->
+<div id="tab-diag" class="hidden">
+
+  <!-- Summary bar -->
+  <div class="flex items-center justify-between mb-4">
+    <p class="text-xs" style="color: var(--color-text-muted);">
+      Archivos disponibles en disco que aún no fueron subidos a storage, organizados por antigüedad del archivo.
+    </p>
+    <button onclick="loadDiag(true)" id="btn-diag-scan" class="btn btn-secondary px-3 py-1.5 text-xs flex-shrink-0">
+      <i data-lucide="scan-search" class="w-3.5 h-3.5"></i> Re-escanear
+    </button>
+  </div>
+
+  <!-- State: loading -->
+  <div id="diag-loading" class="card p-8 text-center hidden">
+    <i data-lucide="loader" class="w-8 h-8 mx-auto mb-3 animate-spin" style="color: var(--color-accent);"></i>
+    <p class="text-sm" style="color: var(--color-text-muted);">Escaneando caché… puede tardar unos segundos.</p>
+  </div>
+
+  <!-- State: results -->
+  <div id="diag-results" class="hidden">
+
+    <!-- KPI cards -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Pendientes de subir</span>
+          <i data-lucide="cloud-upload" class="w-4 h-4" style="color: var(--color-warning);"></i>
+        </div>
+        <div class="stat-card-value text-sm" id="diag-pending-count">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>No disponibles</span>
+          <i data-lucide="file-x" class="w-4 h-4" style="color: var(--color-error);"></i>
+        </div>
+        <div class="stat-card-value text-sm" id="diag-unavailable-count">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-card-header">
+          <span>Cobertura storage</span>
+          <i data-lucide="percent" class="w-4 h-4" style="color: var(--color-accent);"></i>
+        </div>
+        <div class="stat-card-value text-sm" id="diag-coverage">—</div>
+      </div>
+    </div>
+
+    <!-- Age breakdown -->
+    <div class="card p-5 mb-4">
+      <h4 class="text-sm font-semibold mb-4">Pendientes por antigüedad del archivo</h4>
+      <div id="diag-buckets" class="space-y-3"></div>
+    </div>
+
+    <!-- Pending sample -->
+    <div class="card p-5 mb-4" id="diag-pending-section">
+      <div class="flex items-center justify-between mb-3">
+        <h4 class="text-sm font-semibold">Muestra de archivos pendientes</h4>
+        <span class="text-xs" style="color: var(--color-text-muted);">Primeros 20 encontrados</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left border-b" style="border-color: var(--color-border-subtle); color: var(--color-text-muted);">
+              <th class="pb-2 font-medium uppercase tracking-wider pr-4">Nro. póliza</th>
+              <th class="pb-2 font-medium uppercase tracking-wider pr-4">Productor</th>
+              <th class="pb-2 font-medium uppercase tracking-wider pr-4">Archivo</th>
+              <th class="pb-2 font-medium uppercase tracking-wider">Fecha archivo</th>
+            </tr>
+          </thead>
+          <tbody id="diag-pending-tbody" class="divide-y" style="border-color: var(--color-border-subtle);"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Unavailable sample -->
+    <div class="card p-5" id="diag-unavailable-section">
+      <div class="flex items-center justify-between mb-3">
+        <h4 class="text-sm font-semibold">Muestra de archivos no disponibles</h4>
+        <span class="text-xs" style="color: var(--color-text-muted);">Primeros 10 encontrados</span>
+      </div>
+      <p class="text-xs mb-3" style="color: var(--color-text-muted);">
+        Marcados como <code class="font-mono px-1 rounded" style="background: var(--color-bg-tertiary);">ARCHIVO NO DISPONIBLE</code> en SQL Server. No están en disco — no se pueden subir a storage.
+      </p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="text-left border-b" style="border-color: var(--color-border-subtle); color: var(--color-text-muted);">
+              <th class="pb-2 font-medium uppercase tracking-wider pr-4">Nro. póliza</th>
+              <th class="pb-2 font-medium uppercase tracking-wider pr-4">Productor</th>
+              <th class="pb-2 font-medium uppercase tracking-wider">Archivo</th>
+            </tr>
+          </thead>
+          <tbody id="diag-unavailable-tbody" class="divide-y" style="border-color: var(--color-border-subtle);"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- State: empty -->
+  <div id="diag-empty" class="card p-8 text-center hidden">
+    <i data-lucide="check-circle-2" class="w-8 h-8 mx-auto mb-3" style="color: var(--color-success);"></i>
+    <p class="text-sm font-medium">Todo sincronizado</p>
+    <p class="text-xs mt-1" style="color: var(--color-text-muted);">No hay archivos pendientes de subir a storage.</p>
+  </div>
+
+  <!-- State: not loaded -->
+  <div id="diag-idle" class="card p-8 text-center">
+    <i data-lucide="scan-search" class="w-8 h-8 mx-auto mb-3" style="color: var(--color-text-muted);"></i>
+    <p class="text-sm font-medium">Diagnóstico no ejecutado</p>
+    <p class="text-xs mt-1 mb-4" style="color: var(--color-text-muted);">Presioná "Re-escanear" para analizar el estado de los archivos.</p>
+    <button onclick="loadDiag(true)" class="btn btn-primary px-4 py-2 text-sm mx-auto">
+      <i data-lucide="scan-search" class="w-4 h-4"></i> Ejecutar diagnóstico
+    </button>
+  </div>
+
+</div>
+
+<!-- =====================================================================
+     TAB: Gestión
+     ===================================================================== -->
+<div id="tab-mgmt" class="hidden">
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <!-- Refresh -->
+    <div class="card p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="refresh-cw" class="w-5 h-5" style="color: var(--color-accent);"></i>
+        <h4 class="text-sm font-semibold">Refrescar caché</h4>
+      </div>
+      <p class="text-xs mb-4" style="color: var(--color-text-muted);">
+        Re-cachea pólizas de los últimos N días desde SQL Server.
+      </p>
+      <div class="flex items-end gap-2">
+        <div class="flex-1">
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Días</label>
+          <input type="number" id="refresh-days" class="input" value="30" min="1" max="90" />
+        </div>
+        <button onclick="doRefresh()" id="btn-refresh" class="btn btn-primary px-4 py-2">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i> Refrescar
+        </button>
+      </div>
+      <div id="refresh-result" class="mt-3 hidden text-xs" style="color: var(--color-text-muted);"></div>
+    </div>
+
+    <!-- Warmup -->
+    <div class="card p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="flame" class="w-5 h-5" style="color: var(--color-warning);"></i>
+        <h4 class="text-sm font-semibold">Pre-cargar caché</h4>
+      </div>
+      <p class="text-xs mb-4" style="color: var(--color-text-muted);">
+        Pre-carga pólizas en caché para mejorar tiempos de respuesta.
+      </p>
+      <div class="flex items-end gap-2">
+        <div class="flex-1">
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Días</label>
+          <input type="number" id="warmup-days" class="input" value="7" min="1" max="90" />
+        </div>
+        <button onclick="doWarmup()" id="btn-warmup" class="btn btn-warning px-4 py-2">
+          <i data-lucide="flame" class="w-4 h-4"></i> Pre-cargar
+        </button>
+      </div>
+      <div id="warmup-result" class="mt-3 hidden text-xs" style="color: var(--color-text-muted);"></div>
+    </div>
+
+    <!-- Clear -->
+    <div class="card p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <i data-lucide="trash-2" class="w-5 h-5" style="color: var(--color-error);"></i>
+        <h4 class="text-sm font-semibold">Limpiar caché</h4>
+      </div>
+      <p class="text-xs mb-4" style="color: var(--color-text-muted);">
+        Elimina toda la caché. Se requiere re-carga manual después.
+      </p>
+      <button onclick="doClear()" id="btn-clear" class="btn btn-danger px-4 py-2 w-full">
+        <i data-lucide="trash-2" class="w-4 h-4"></i> Limpiar todo
+      </button>
+      <div id="clear-result" class="mt-3 hidden text-xs" style="color: var(--color-text-muted);"></div>
+    </div>
+  </div>
+
+  <!-- Delete specific -->
+  <div class="card p-5 mt-4">
+    <h4 class="text-sm font-semibold mb-3">Eliminar caché específica</h4>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Por nro. de póliza</label>
+        <div class="flex gap-2">
+          <input type="text" id="del-nro" class="input flex-1" placeholder="1234567" />
+          <button onclick="deleteByNro()" class="btn btn-danger px-3 py-2">
+            <i data-lucide="trash" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Por fecha de emisión</label>
+        <div class="flex gap-2">
+          <input type="date" id="del-date" class="input flex-1" />
+          <button onclick="deleteByDate()" class="btn btn-danger px-3 py-2">
+            <i data-lucide="trash" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block page_scripts %}
+<style>
+  .tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover { color: var(--color-text-primary); }
+  .tab-btn.active { color: var(--color-accent); border-bottom-color: var(--color-accent); }
+</style>
+
+<script>
+  // =========================================================================
+  // Tab switching
+  // =========================================================================
+  function switchTab(name) {
+    ['stats', 'diag', 'mgmt'].forEach(t => {
+      document.getElementById('tab-' + t).classList.toggle('hidden', t !== name);
+      document.querySelector(`[data-tab="${t}"]`).classList.toggle('active', t === name);
+    });
+    if (name === 'stats' && document.getElementById('cs-policies').classList.contains('skeleton-line')) {
+      loadCacheStats();
+    }
+  }
+
+  // =========================================================================
+  // Estadísticas tab
+  // =========================================================================
+  async function loadCacheStats() {
+    const resp = await apiFetch('/cache/stats');
+    if (!resp || !resp.ok) { showToast('Error al cargar estadísticas de caché', 'error'); return; }
+    const data = await resp.json();
+
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      el.textContent = val != null ? (val.toLocaleString?.() || val) : '—';
+      el.classList.remove('skeleton-line');
+    };
+
+    set('cs-policies', data.total_policies);
+    set('cs-dates', data.unique_dates);
+    set('cs-producers', data.unique_producers);
+    set('cs-last-sync', timeAgo(data.last_sync));
+    set('cs-available', data.available_files);
+    set('cs-in-storage', data.files_in_storage);
+    set('cs-pending', data.files_pending);
+    set('cs-coverage', data.coverage_pct != null ? data.coverage_pct + '%' : '—');
+
+    // Update diag badge from stats (fast check)
+    const n = data.files_pending ?? 0;
+    const diagBadge = document.getElementById('diag-badge');
+    if (n > 0) {
+      diagBadge.textContent = n > 999 ? '999+' : n.toLocaleString();
+      diagBadge.classList.remove('hidden');
+    } else {
+      diagBadge.classList.add('hidden');
+    }
+
+    document.getElementById('cache-raw').textContent = JSON.stringify(data, null, 2);
+    document.getElementById('cache-extra').classList.remove('hidden');
+  }
+
+  // =========================================================================
+  // Diagnóstico tab
+  // =========================================================================
+  let _diagLoaded = false;
+
+  async function loadDiag(force = false) {
+    if (_diagLoaded && !force) return;
+
+    const idle = document.getElementById('diag-idle');
+    const loading = document.getElementById('diag-loading');
+    const results = document.getElementById('diag-results');
+    const empty = document.getElementById('diag-empty');
+
+    idle.classList.add('hidden');
+    empty.classList.add('hidden');
+    results.classList.add('hidden');
+    loading.classList.remove('hidden');
+
+    const btn = document.getElementById('btn-diag-scan');
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="w-3.5 h-3.5 animate-spin"></i> Escaneando…';
+    if (window.lucide) lucide.createIcons();
+
+    const resp = await apiFetch('/cache/diagnostics');
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="scan-search" class="w-3.5 h-3.5"></i> Re-escanear';
+    if (window.lucide) lucide.createIcons();
+    loading.classList.add('hidden');
+
+    if (!resp || !resp.ok) {
+      showToast('Error al cargar diagnóstico', 'error');
+      idle.classList.remove('hidden');
+      return;
+    }
+
+    const d = await resp.json();
+    _diagLoaded = true;
+
+    if (d.pending_count === 0 && d.unavailable_count === 0) {
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    // KPIs
+    document.getElementById('diag-pending-count').textContent = (d.pending_count ?? 0).toLocaleString();
+    document.getElementById('diag-unavailable-count').textContent = (d.unavailable_count ?? 0).toLocaleString();
+
+    // Coverage from pending + available
+    const avail = d.available_total ?? 0;
+    const pending = d.pending_count ?? 0;
+    const inStorage = avail - pending;
+    document.getElementById('diag-coverage').textContent =
+      avail > 0 ? (Math.round(inStorage / avail * 1000) / 10) + '%' : '—';
+
+    // Age buckets bar chart
+    const buckets = d.buckets || {};
+    const bucketDefs = [
+      { key: 'last_7d',      label: 'Últimos 7 días',  color: 'var(--color-error)' },
+      { key: 'days_8_30',    label: '8 – 30 días',     color: 'var(--color-warning)' },
+      { key: 'days_31_90',   label: '31 – 90 días',    color: 'var(--color-accent)' },
+      { key: 'over_90d',     label: '> 90 días',       color: 'var(--color-text-muted)' },
+      { key: 'unknown_date', label: 'Sin fecha',       color: 'var(--color-border-subtle)' },
+    ];
+    const maxCount = Math.max(1, ...bucketDefs.map(b => buckets[b.key] ?? 0));
+    const bucketsEl = document.getElementById('diag-buckets');
+    bucketsEl.innerHTML = bucketDefs.map(b => {
+      const count = buckets[b.key] ?? 0;
+      if (count === 0) return '';
+      const pct = Math.max(2, Math.round(count / maxCount * 100));
+      return `
+        <div class="flex items-center gap-3">
+          <div class="text-xs w-28 flex-shrink-0" style="color: var(--color-text-secondary);">${esc(b.label)}</div>
+          <div class="flex-1 h-2 rounded-full overflow-hidden" style="background: var(--color-bg-tertiary);">
+            <div class="h-2 rounded-full" style="width:${pct}%; background: ${b.color};"></div>
+          </div>
+          <div class="text-xs font-mono w-16 text-right flex-shrink-0" style="color: ${b.color};">${count.toLocaleString()}</div>
+        </div>`;
+    }).join('');
+
+    // Pending sample table
+    const pendingTbody = document.getElementById('diag-pending-tbody');
+    if (d.pending_sample && d.pending_sample.length > 0) {
+      pendingTbody.innerHTML = d.pending_sample.map(f => `
+        <tr>
+          <td class="py-2 pr-4 font-mono" style="color: var(--color-text-primary);">${esc(f.nro_pol)}</td>
+          <td class="py-2 pr-4" style="color: var(--color-text-secondary);">${esc(f.producer_code || '—')}</td>
+          <td class="py-2 pr-4 font-mono max-w-xs truncate" style="color: var(--color-text-muted);" title="${esc(f.file_name)}">${esc(f.file_name)}</td>
+          <td class="py-2" style="color: var(--color-text-muted);">${f.created_at ? formatDateShort(f.created_at) : '—'}</td>
+        </tr>`).join('');
+      document.getElementById('diag-pending-section').classList.remove('hidden');
+    } else {
+      document.getElementById('diag-pending-section').classList.add('hidden');
+    }
+
+    // Unavailable sample table
+    const unavailTbody = document.getElementById('diag-unavailable-tbody');
+    if (d.unavailable_sample && d.unavailable_sample.length > 0) {
+      unavailTbody.innerHTML = d.unavailable_sample.map(f => `
+        <tr>
+          <td class="py-2 pr-4 font-mono" style="color: var(--color-text-primary);">${esc(f.nro_pol)}</td>
+          <td class="py-2 pr-4" style="color: var(--color-text-secondary);">${esc(f.producer_code || '—')}</td>
+          <td class="py-2 font-mono max-w-xs truncate" style="color: var(--color-error);" title="${esc(f.file_name)}">${esc(f.file_name)}</td>
+        </tr>`).join('');
+      document.getElementById('diag-unavailable-section').classList.remove('hidden');
+    } else {
+      document.getElementById('diag-unavailable-section').classList.add('hidden');
+    }
+
+    results.classList.remove('hidden');
+  }
+
+  // =========================================================================
+  // Gestión tab
+  // =========================================================================
+  async function doRefresh() {
+    const days = document.getElementById('refresh-days').value;
+    const btn = document.getElementById('btn-refresh');
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Refrescando…';
+
+    const resp = await apiFetch('/cache/refresh?days=' + days, { method: 'POST' });
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="refresh-cw" class="w-4 h-4"></i> Refrescar';
+    if (window.lucide) lucide.createIcons();
+
+    const resultEl = document.getElementById('refresh-result');
+    if (resp && resp.ok) {
+      const data = await resp.json();
+      resultEl.innerHTML = `<span style="color: var(--color-success);">✓ ${esc(data.message || 'Cache refrescada')}</span>`;
+      resultEl.classList.remove('hidden');
+      showToast('Caché refrescada correctamente');
+      _diagLoaded = false;
+    } else {
+      resultEl.innerHTML = '<span style="color: var(--color-error);">Error al refrescar</span>';
+      resultEl.classList.remove('hidden');
+      showToast('Error al refrescar caché', 'error');
+    }
+  }
+
+  async function doWarmup() {
+    const days = document.getElementById('warmup-days').value;
+    const btn = document.getElementById('btn-warmup');
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Pre-cargando…';
+
+    const resp = await apiFetch('/cache/warmup?days=' + days, { method: 'POST' });
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="flame" class="w-4 h-4"></i> Pre-cargar';
+    if (window.lucide) lucide.createIcons();
+
+    const resultEl = document.getElementById('warmup-result');
+    if (resp && resp.ok) {
+      const data = await resp.json();
+      resultEl.innerHTML = `<span style="color: var(--color-success);">✓ ${data.policiesCached ?? '?'} pólizas en ${(data.durationSeconds ?? 0).toFixed(1)}s</span>`;
+      resultEl.classList.remove('hidden');
+      showToast('Pre-carga completada');
+      _diagLoaded = false;
+    } else {
+      resultEl.innerHTML = '<span style="color: var(--color-error);">Error en pre-carga</span>';
+      resultEl.classList.remove('hidden');
+      showToast('Error en pre-carga', 'error');
+    }
+  }
+
+  async function doClear() {
+    if (!confirm('¿Seguro que desea limpiar toda la caché? Esto requiere una re-carga manual.')) return;
+
+    const btn = document.getElementById('btn-clear');
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> Limpiando…';
+
+    const resp = await apiFetch('/cache/clear', { method: 'DELETE' });
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="trash-2" class="w-4 h-4"></i> Limpiar todo';
+    if (window.lucide) lucide.createIcons();
+
+    const resultEl = document.getElementById('clear-result');
+    if (resp && resp.ok) {
+      resultEl.innerHTML = '<span style="color: var(--color-success);">✓ Caché limpiada.</span> <span style="color: var(--color-text-muted);">Usá "Refrescar caché" para re-cargar los datos.</span>';
+      resultEl.classList.remove('hidden');
+      showToast('Caché limpiada');
+      _diagLoaded = false;
+    } else {
+      resultEl.innerHTML = '<span style="color: var(--color-error);">Error al limpiar</span>';
+      resultEl.classList.remove('hidden');
+      showToast('Error al limpiar caché', 'error');
+    }
+  }
+
+  async function deleteByNro() {
+    const nro = document.getElementById('del-nro').value.trim();
+    if (!nro) { showToast('Ingrese un nro. de póliza', 'error'); return; }
+    if (!confirm(`¿Eliminar caché de póliza ${nro}?`)) return;
+    const resp = await apiFetch('/cache/policies/' + encodeURIComponent(nro), { method: 'DELETE' });
+    if (resp && resp.ok) {
+      showToast(`Caché de póliza ${nro} eliminada`);
+      _diagLoaded = false;
+    } else {
+      showToast('Error al eliminar', 'error');
+    }
+  }
+
+  async function deleteByDate() {
+    const dt = document.getElementById('del-date').value;
+    if (!dt) { showToast('Seleccione una fecha', 'error'); return; }
+    if (!confirm(`¿Eliminar caché de fecha ${dt}?`)) return;
+    const resp = await apiFetch('/cache/date/' + dt, { method: 'DELETE' });
+    if (resp && resp.ok) {
+      showToast(`Caché de fecha ${dt} eliminada`);
+      _diagLoaded = false;
+    } else {
+      showToast('Error al eliminar', 'error');
+    }
+  }
+
+  // =========================================================================
+  // Init
+  // =========================================================================
+  loadCacheStats();
+</script>
+{% endblock %}

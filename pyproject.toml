@@ -1,0 +1,19 @@
+[tool.ruff]
+line-length = 100
+# INTENTIONAL: lowest Python this repo runs on (docker/Dockerfile*: python:3.12-slim-bookworm;
+# CI tests 3.12 and 3.14). A newer target lets ruff rewrite code into syntax 3.12 rejects.
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+# Long log messages, SQL and docstrings stay as they are; the formatter wraps code.
+# UP042: moving `(str, Enum)` to StrEnum changes str() output; not done blindly.
+# UP046: PaginatedResponse stays a `Generic[T]` pydantic model; PEP 695 syntax is not a lint fix.
+ignore = ["E501", "UP042", "UP046"]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependencies are declared as default arguments by design.
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Form", "fastapi.File"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]

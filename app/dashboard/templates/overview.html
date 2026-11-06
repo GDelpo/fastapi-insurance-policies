@@ -1,0 +1,250 @@
+{# Overview — main dashboard page: stats, health, recent policies. #}
+{% extends "shell.html" %}
+{% block page_title %}Resumen{% endblock %}
+
+{% block page_content %}
+<!-- Stat cards row -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+  <div class="stat-card" id="sc-total">
+    <div class="stat-card-header">
+      <span>Pólizas totales</span>
+      <i data-lucide="scroll-text" class="w-4 h-4" style="color: var(--color-accent);"></i>
+    </div>
+    <div class="stat-card-value skeleton-line" id="sv-total">—</div>
+    <div class="text-xs mt-1" style="color: var(--color-text-muted);">pólizas en caché</div>
+  </div>
+  <div class="stat-card" id="sc-files">
+    <div class="stat-card-header">
+      <span>Archivos totales</span>
+      <i data-lucide="file" class="w-4 h-4" style="color: var(--color-accent);"></i>
+    </div>
+    <div class="stat-card-value skeleton-line" id="sv-files">—</div>
+    <div class="text-xs mt-1" style="color: var(--color-text-muted);">archivos registrados</div>
+  </div>
+  <div class="stat-card" id="sc-storage">
+    <div class="stat-card-header">
+      <span>En Storage</span>
+      <i data-lucide="cloud" class="w-4 h-4" style="color: var(--color-success);"></i>
+    </div>
+    <div class="stat-card-value skeleton-line" id="sv-storage">—</div>
+    <div class="text-xs mt-1" style="color: var(--color-text-muted);">archivos en Cloud</div>
+  </div>
+  <div class="stat-card" id="sc-pending">
+    <div class="stat-card-header">
+      <span>Pendientes</span>
+      <i data-lucide="clock" class="w-4 h-4" style="color: var(--color-warning);"></i>
+    </div>
+    <div class="stat-card-value skeleton-line" id="sv-pending">—</div>
+    <div class="text-xs mt-1" style="color: var(--color-text-muted);">archivos por subir</div>
+  </div>
+  <a href="{{ base }}/dashboard/cache" class="stat-card no-underline block" id="sc-unavailable"
+     title="Archivos marcados como no disponibles en SQL Server. En su mayoría corresponden a pólizas antiguas o shares de red que ya no están montados (ej. \\fileserver\policies-urgent). No son enviables. Hacé clic para ver el diagnóstico.">
+    <div class="stat-card-header">
+      <span>No disponibles</span>
+      <i data-lucide="alert-triangle" class="w-4 h-4" style="color: var(--color-error);"></i>
+    </div>
+    <div class="stat-card-value skeleton-line" id="sv-unavailable">—</div>
+    <div class="text-xs mt-1" style="color: var(--color-text-muted);">archivos sin acceso · Ver diagnóstico →</div>
+  </a>
+</div>
+
+<!-- Health + Cache stats row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+  <!-- Health -->
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--color-text-muted);">Estado del servicio</h3>
+      <span id="health-badge" class="badge badge-unknown">cargando...</span>
+    </div>
+    <div class="text-xs" style="color: var(--color-text-muted);">
+      <div class="flex items-center justify-between py-1.5"><span>Versión</span><span id="health-version" class="font-mono">—</span></div>
+      <div class="flex items-center justify-between py-1.5"><span>Entorno</span><span id="health-env" class="font-mono">—</span></div>
+    </div>
+    <div id="health-deps" class="space-y-2 mt-3"></div>
+  </div>
+
+  <!-- Cache stats -->
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--color-text-muted);">Caché</h3>
+      <a href="{{ base }}/dashboard/cache" class="text-xs font-medium" style="color: var(--color-accent);">Administrar →</a>
+    </div>
+    <div id="cache-stats" class="text-xs space-y-1.5" style="color: var(--color-text-muted);">
+      <div class="flex justify-between"><span>Pólizas en caché</span><span id="cache-policies" class="font-mono">—</span></div>
+      <div class="flex justify-between"><span>Fechas únicas</span><span id="cache-dates" class="font-mono">—</span></div>
+      <div class="flex justify-between"><span>Productores</span><span id="cache-producers" class="font-mono">—</span></div>
+      <div class="flex justify-between"><span>Última sincronización</span><span id="cache-last-sync" class="font-mono">—</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Readiness check quick widget -->
+<div class="card p-5 mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--color-text-muted);">Disponibilidad rápida</h3>
+    <a href="{{ base }}/dashboard/readiness" class="text-xs font-medium" style="color: var(--color-accent);">Ver detalle →</a>
+  </div>
+  <div class="flex items-end gap-3">
+    <div class="flex-1">
+      <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Fecha de emisión</label>
+      <input type="date" id="quick-date" class="input" />
+    </div>
+    <button onclick="checkReadiness()" class="btn btn-primary px-4 py-2">
+      <i data-lucide="check-circle" class="w-4 h-4"></i> Verificar
+    </button>
+  </div>
+  <div id="quick-result" class="mt-3 hidden">
+    <div class="flex items-center gap-6 text-sm">
+      <span>Total: <strong id="qr-total">—</strong></span>
+      <span>Completas: <strong id="qr-complete" class="text-green-400">—</strong></span>
+      <span>Faltantes: <strong id="qr-missing" class="text-red-400">—</strong></span>
+      <span id="qr-badge"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Recent policies table -->
+<div class="card">
+  <div class="flex items-center justify-between p-4 pb-0">
+    <h3 class="text-sm font-semibold uppercase tracking-wider" style="color: var(--color-text-muted);">Últimas pólizas</h3>
+    <a href="{{ base }}/dashboard/policies" class="text-xs font-medium" style="color: var(--color-accent);">Ver todas →</a>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="data-table w-full" id="recent-table">
+      <thead>
+        <tr>
+          <th>Nro. Póliza</th>
+          <th>Ramo</th>
+          <th>Asegurado</th>
+          <th>Productor</th>
+          <th>Emisión</th>
+          <th>Archivos</th>
+          <th>Storage</th>
+        </tr>
+      </thead>
+      <tbody id="recent-body">
+        <tr><td colspan="7" class="text-center py-8" style="color: var(--color-text-muted);">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  const DASH = BASE + '/dashboard';
+
+  // Quick readiness date defaults to today
+  document.getElementById('quick-date').value = todayISO();
+
+  async function loadOverview() {
+    // Parallel: health + cache stats + recent policies (stats only called here, not in shell)
+    const [healthResp, cacheResp, recentResp] = await Promise.all([
+      fetch(BASE + '/health').then(r => r.ok ? r.json() : null).catch(() => null),
+      apiFetch('/cache/stats').then(r => r && r.ok ? r.json() : null).catch(() => null),
+      apiFetch('/policies?limit=10&sort_order=desc'),
+    ]);
+
+    // Health
+    if (healthResp) {
+      const s = healthResp.status || 'unknown';
+      document.getElementById('health-badge').className = 'badge badge-' + s;
+      document.getElementById('health-badge').textContent = s;
+      document.getElementById('health-version').textContent = healthResp.version || '—';
+      document.getElementById('health-env').textContent = healthResp.environment || '—';
+      const depsEl = document.getElementById('health-deps');
+      Object.values(healthResp.dependencies || {}).forEach(dep => {
+        depsEl.innerHTML += `
+          <div class="flex items-center justify-between text-xs py-1" style="border-top: 1px solid var(--color-border);">
+            <span class="font-medium">${esc(dep.name)}</span>
+            <div class="flex items-center gap-2">
+              ${dep.latencyMs != null ? `<span class="font-mono" style="color: var(--color-text-muted);">${dep.latencyMs.toFixed(1)}ms</span>` : ''}
+              ${healthBadge(dep.status)}
+            </div>
+          </div>`;
+      });
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // Cache stats
+    if (cacheResp) {
+      const cs = cacheResp;
+      document.getElementById('cache-policies').textContent = (cs.total_policies ?? '—').toLocaleString();
+      document.getElementById('cache-dates').textContent = cs.unique_dates ?? '—';
+      document.getElementById('cache-producers').textContent = cs.unique_producers ?? '—';
+      const syncEl = document.getElementById('cache-last-sync');
+      syncEl.textContent = timeAgo(cs.last_sync);
+      // Warn if cache hasn't been synced in more than 24 hours
+      if (cs.sync_age_seconds != null && cs.sync_age_seconds > 86400) {
+        syncEl.style.color = 'var(--color-warning)';
+        syncEl.title = 'La caché tiene más de 24 horas sin sincronizar. Los datos pueden estar desactualizados.';
+        const warnEl = document.getElementById('cache-stats').querySelector('.cache-stale-warn');
+        if (!warnEl) {
+          const warn = document.createElement('div');
+          warn.className = 'cache-stale-warn flex items-center gap-1 mt-2';
+          warn.style.color = 'var(--color-warning)';
+          warn.innerHTML = '<i data-lucide="alert-triangle" class="w-3 h-3"></i><span>Caché desactualizada — <a href="' + DASH + '/cache" style="color:var(--color-accent);text-decoration:underline;">Sincronizar ahora →</a></span>';
+          document.getElementById('cache-stats').appendChild(warn);
+          if (window.lucide) lucide.createIcons();
+        }
+      }
+
+      // Stat cards from cache file counters
+      if (cs.total_files) document.getElementById('sv-files').textContent = cs.total_files.toLocaleString();
+      if (cs.files_in_storage != null) document.getElementById('sv-storage').textContent = cs.files_in_storage.toLocaleString();
+      if (cs.files_pending != null) document.getElementById('sv-pending').textContent = cs.files_pending.toLocaleString();
+      if (cs.unavailable_files != null) document.getElementById('sv-unavailable').textContent = cs.unavailable_files.toLocaleString();
+    }
+
+    // Recent policies
+    if (recentResp && recentResp.ok) {
+      const data = await recentResp.json();
+      const items = data.data || [];
+      const body = document.getElementById('recent-body');
+
+      if (items.length === 0) {
+        body.innerHTML = '<tr><td colspan="7" class="text-center py-8" style="color: var(--color-text-muted);">Sin pólizas</td></tr>';
+      } else {
+        body.innerHTML = items.map(p => `
+          <tr class="cursor-pointer" data-href="${esc(DASH + '/policies/' + encodeURIComponent(p.nroPol))}">
+            <td class="font-mono font-medium">${esc(p.nroPol)}</td>
+            <td title="${esc(p.ramo)}" class="max-w-[140px]"><span class="block truncate text-xs">${esc(p.ramo)}</span></td>
+            <td>${esc(p.insured?.name || '—')}</td>
+            <td>${esc(p.producer?.name || '—')}</td>
+            <td class="text-xs">${formatDateShort(p.emissionDate)}</td>
+            <td class="text-center">${p.totalFileCount ?? 0}</td>
+            <td>${p.allInStorage ? storageBadge(true) : storageBadge(false)}</td>
+          </tr>`).join('');
+        if (window.lucide) lucide.createIcons();
+      }
+
+      // Update stat cards from pagination total
+      const total = data.meta?.total ?? items.length;
+      document.getElementById('sv-total').textContent = total.toLocaleString();
+      document.getElementById('sv-total').classList.remove('skeleton-line');
+    }
+
+    // Remove skeleton from other stat cards
+    ['sv-files', 'sv-storage', 'sv-pending', 'sv-unavailable'].forEach(id => {
+      document.getElementById(id).classList.remove('skeleton-line');
+    });
+  }
+
+  async function checkReadiness() {
+    const dateVal = document.getElementById('quick-date').value;
+    if (!dateVal) return;
+    const resp = await apiFetch(`/policies/readiness?emission_date=${dateVal}&include_missing=false`);
+    if (!resp || !resp.ok) { showToast('Error al verificar disponibilidad', 'error'); return; }
+    const data = await resp.json();
+    document.getElementById('qr-total').textContent = data.total;
+    document.getElementById('qr-complete').textContent = data.complete;
+    document.getElementById('qr-missing').textContent = data.missing;
+    document.getElementById('qr-badge').innerHTML = data.ready
+      ? '<span class="badge badge-healthy">Listo para despacho</span>'
+      : `<span class="badge badge-unhealthy">Incompleto</span> <a href="${DASH}/readiness?date=${document.getElementById('quick-date').value}" class="text-xs ml-2" style="color:var(--color-accent);">Ver detalle →</a>`;
+    document.getElementById('quick-result').classList.remove('hidden');
+  }
+
+  loadOverview();
+</script>
+{% endblock %}

@@ -1,0 +1,77 @@
+# ============================================================================
+# Polizas Service - Production Dockerfile
+# Python 3.12 + FreeTDS for SQL Server 2008 R2 compatibility (bookworm: its
+# OpenSSL still negotiates the old TLS that SQL Server 2008 R2 speaks).
+# 3.12 was picked because pyodbc had no 3.14 wheels. pyodbc 5.4 has them and CI
+# runs the tests on 3.14, but this image has not been moved to 3.14 against a
+# real SQL Server 2008 R2 yet.
+# ============================================================================
+
+# ============================================================================
+# Stage 1: Builder - Install dependencies in a virtual environment
+# ============================================================================
+FROM python:3.12-slim-bookworm AS builder
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    freetds-dev \
+    unixodbc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# ============================================================================
+# Stage 2: Runtime - Minimal production image
+# ============================================================================
+FROM python:3.12-slim-bookworm
+
+WORKDIR /app
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH=/app
+
+# FreeTDS driver (compatible with SQL Server 2008 R2 / TLS 1.0)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tdsodbc \
+    freetds-dev \
+    unixodbc \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure FreeTDS ODBC driver
+RUN echo "[FreeTDS]\nDescription=FreeTDS Driver\nDriver=/usr/lib/x86_64-linux-gnu/odbc/libtdsodbc.so\nSetup=/usr/lib/x86_64-linux-gnu/odbc/libtdsS.so\nFileUsage=1" > /etc/odbcinst.ini
+
+# Configure FreeTDS settings
+RUN echo "[global]\ntds version = 7.3\ntext size = 64512\nencryption = off" > /etc/freetds/freetds.conf
+
+RUN useradd -m -u 1000 appuser
+
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY --chown=appuser:appuser app/ ./app/
+
+RUN mkdir -p /app/logs && chown appuser:appuser /app/logs
+
+USER appuser
+
+EXPOSE 8000
+
+# start-period permite el warmup del cache (~3min en primer boot con 100k+ pólizas)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Single worker — async FastAPI handles concurrency natively.
+# Multiple workers each run the full cache warmup independently, which
+# causes OOM / startup timeouts with 100k+ policy datasets.
+CMD ["gunicorn", "app.main:app", "--workers", "1", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--log-level", "info", "--forwarded-allow-ips=*"]

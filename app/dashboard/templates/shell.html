@@ -1,0 +1,28 @@
+{# App shell — sidebar + header + content area.
+   All authenticated pages extend this template. #}
+{% extends "base.html" %}
+
+{% block body %}
+<div id="app-shell" class="flex h-screen overflow-hidden">
+
+  {% include "_partials/_sidebar.html" %}
+
+  <main class="flex-1 overflow-y-auto">
+    {% include "_partials/_topbar.html" %}
+
+    <div id="page-content" class="p-6 fade-in">
+      {% block page_content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+  {# base comes from X-Forwarded-Prefix (request header): tojson, never a quoted string. #}
+  <script>const BASE = {{ base | tojson }};</script>
+  {% include "_js/_auth.js.html" %}
+  {% include "_js/_helpers.js.html" %}
+
+  {% block page_scripts %}{% endblock %}
+
+{% endblock %}

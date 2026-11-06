@@ -1,0 +1,46 @@
+{# Sidebar navigation partial.
+   Expects: base, service_name, service_icon, nav_items #}
+<aside class="w-60 flex-shrink-0 flex flex-col border-r h-full overflow-y-auto" style="background: var(--color-surface-1); border-color: var(--color-border-subtle);">
+  <div class="p-5 flex items-center gap-3">
+    <div class="flex items-center justify-center w-9 h-9 rounded-xl" style="background: var(--color-accent-soft);">
+      <i data-lucide="{{ service_icon }}" class="w-5 h-5" style="color: var(--color-accent);" aria-hidden="true"></i>
+    </div>
+    <div>
+      <div class="text-sm font-bold tracking-tight">{{ service_name }}</div>
+      <div class="text-[10px] font-medium uppercase tracking-widest" style="color: var(--color-text-muted);">Dashboard</div>
+    </div>
+  </div>
+
+  <nav class="flex-1 px-3 py-2 space-y-1">
+    {% for item in nav_items %}
+    <a href="{{ item.href }}" class="nav-link {% if item.active %}active{% endif %}" data-nav="{{ item.key }}">
+      <i data-lucide="{{ item.icon }}" class="w-4 h-4" aria-hidden="true"></i>
+      {{ item.label }}
+    </a>
+    {% endfor %}
+  </nav>
+
+  {# Optional external docs link (set DOCS_URL in .env to enable) #}
+  {% if docs_url %}
+  <div class="px-3 py-2 border-t" style="border-color: var(--color-border-subtle);">
+    <div class="grid grid-cols-4 gap-0.5 px-1">
+      <a href="{{ docs_url }}" target="_blank" rel="noopener noreferrer" title="Docs" class="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-[var(--color-surface-2)]" style="color:var(--color-text-muted)"><i data-lucide="book-open" class="w-4 h-4" aria-hidden="true"></i></a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="p-3 border-t" style="border-color: var(--color-border-subtle);">
+    <div class="flex items-center gap-3 px-3 py-2">
+      <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold" style="background: var(--color-accent-soft); color: var(--color-accent);">
+        <span id="user-initials">A</span>
+      </div>
+      <div class="flex-1 min-w-0">
+        <div id="user-name" class="text-sm font-medium truncate">Admin</div>
+        <div id="user-role" class="text-[10px] uppercase tracking-wider" style="color: var(--color-text-muted);">admin</div>
+      </div>
+      <button onclick="logout()" class="p-1.5 rounded-lg transition-colors hover:bg-[var(--color-surface-2)]" title="Cerrar sesión" aria-label="Cerrar sesión">
+        <i data-lucide="log-out" class="w-4 h-4" style="color: var(--color-text-muted);" aria-hidden="true"></i>
+      </button>
+    </div>
+  </div>
+</aside>

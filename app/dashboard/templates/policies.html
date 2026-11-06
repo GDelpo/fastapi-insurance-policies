@@ -1,0 +1,390 @@
+{# Policies list — filterable, paginated, sortable table of all policies. #}
+{% extends "shell.html" %}
+
+{% block title %}{{ service_name }} — Pólizas{% endblock %}
+
+{% block page_content %}
+<div id="policies-page">
+
+  <!-- Búsqueda directa por nro. póliza -->
+  <div class="card p-4 mb-3">
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="flex-1 min-w-[200px]">
+        <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Nro. Póliza</label>
+        <input type="text" id="f-nro-pol" class="input" placeholder="Ej: 12345" autocomplete="off"
+               onkeydown="if(event.key==='Enter') goToPolicy()" />
+      </div>
+      <button onclick="goToPolicy()" class="btn btn-primary px-4 py-2">
+        <i data-lucide="search" class="w-4 h-4" aria-hidden="true"></i> Ir a póliza
+      </button>
+    </div>
+  </div>
+
+  <!-- Filter panel (collapsible) -->
+  <details id="filter-panel" class="filter-panel card mb-4" open>
+    <summary class="flex items-center justify-between px-5 py-3 cursor-pointer select-none">
+      <span class="text-sm font-medium flex items-center gap-2" style="color: var(--color-text-secondary);">
+        <i data-lucide="sliders-horizontal" class="w-4 h-4" aria-hidden="true"></i>
+        Filtros
+        <span id="filter-badge" class="hidden px-1.5 py-0.5 rounded-full text-xs font-bold leading-none"
+              style="background: var(--color-accent-soft); color: var(--color-accent-hover);">0</span>
+      </span>
+      <i data-lucide="chevron-down" class="w-4 h-4 filter-chevron" aria-hidden="true"></i>
+    </summary>
+    <div class="px-5 pb-4 pt-3 border-t" style="border-color: var(--color-border-subtle);">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Fecha emisión</label>
+          <input type="date" id="f-emission" class="input w-44" oninput="updateFilterBadge()" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Desde</label>
+          <input type="date" id="f-start" class="input w-44" oninput="updateFilterBadge()" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Hasta</label>
+          <input type="date" id="f-end" class="input w-44" oninput="updateFilterBadge()" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Ramo</label>
+          <input type="text" id="f-ramo" class="input w-36" placeholder="Filtrar ramo…"
+                 oninput="filterTableByRamo()" autocomplete="off" />
+        </div>
+        <div class="flex items-center gap-2 pb-0.5">
+          <input type="checkbox" id="f-has-files" class="w-4 h-4 rounded" style="accent-color: var(--color-accent);"
+                 onchange="updateFilterBadge()" />
+          <label for="f-has-files" class="text-xs" style="color: var(--color-text-muted);">Solo con archivos</label>
+        </div>
+        <div class="flex items-center gap-2 pb-0.5">
+          <input type="checkbox" id="f-has-unavailable" class="w-4 h-4 rounded" style="accent-color: var(--color-warning);"
+                 onchange="updateFilterBadge()" />
+          <label for="f-has-unavailable" class="text-xs" style="color: var(--color-text-muted);">Con archivos no disponibles</label>
+        </div>
+        <div>
+          <label class="block text-xs font-medium uppercase tracking-wider mb-1" style="color: var(--color-text-muted);">Límite</label>
+          <select id="f-limit" class="select w-24">
+            <option value="25">25</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="500">500</option>
+          </select>
+        </div>
+        <button onclick="loadPolicies(0)" class="btn btn-primary btn-sm">
+          <i data-lucide="search" class="w-3.5 h-3.5" aria-hidden="true"></i>
+          Buscar
+        </button>
+        <button onclick="clearFilters()" class="btn btn-ghost btn-sm" title="Limpiar filtros">
+          <i data-lucide="rotate-ccw" class="w-3.5 h-3.5" aria-hidden="true"></i>
+          Limpiar
+        </button>
+      </div>
+    </div>
+  </details>
+
+  <!-- Table card -->
+  <div class="card">
+    <div class="overflow-x-auto">
+      <table class="data-table w-full" id="pol-table">
+        <thead>
+          <tr>
+            <th class="sortable-col" onclick="setSort('nroPol')" aria-sort="none">
+              Nro. Póliza
+              <span class="sort-icon" id="sort-nroPol">
+                <i data-lucide="chevrons-up-down" class="w-3 h-3" aria-hidden="true"></i>
+              </span>
+            </th>
+            <th class="hidden sm:table-cell sortable-col" onclick="setSort('ramo')" aria-sort="none">
+              Ramo
+              <span class="sort-icon" id="sort-ramo">
+                <i data-lucide="chevrons-up-down" class="w-3 h-3" aria-hidden="true"></i>
+              </span>
+            </th>
+            <th class="hidden md:table-cell">Asegurado</th>
+            <th class="hidden lg:table-cell">Productor</th>
+            <th class="sortable-col" onclick="setSort('emissionDate')" aria-sort="descending">
+              Emisión
+              <span class="sort-icon active" id="sort-emissionDate">
+                <i data-lucide="chevron-down" class="w-3 h-3" aria-hidden="true"></i>
+              </span>
+            </th>
+            <th class="hidden md:table-cell text-center">Endosos</th>
+            <th class="hidden sm:table-cell sortable-col text-center" onclick="setSort('totalFileCount')" aria-sort="none">
+              Archivos
+              <span class="sort-icon" id="sort-totalFileCount">
+                <i data-lucide="chevrons-up-down" class="w-3 h-3" aria-hidden="true"></i>
+              </span>
+            </th>
+            <th>Storage</th>
+          </tr>
+        </thead>
+        <tbody id="pol-body">
+          <tr><td colspan="8" class="text-center py-8" style="color: var(--color-text-muted);">
+            <div class="skeleton h-4 w-48 mx-auto"></div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination footer -->
+    <div class="px-5 py-3 flex items-center justify-between border-t" style="border-color: var(--color-border-subtle);">
+      <span id="results-info" class="text-xs" style="color: var(--color-text-muted);">Cargando…</span>
+      <div class="flex items-center gap-1">
+        <button id="btn-prev" onclick="prevPage()" class="btn btn-ghost btn-sm" disabled>
+          <i data-lucide="chevron-left" class="w-3.5 h-3.5" aria-hidden="true"></i> Anterior
+        </button>
+        <button id="btn-next" onclick="nextPage()" class="btn btn-ghost btn-sm" disabled>
+          Siguiente <i data-lucide="chevron-right" class="w-3.5 h-3.5" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  document.body.dataset.currentPage = 'policies';
+
+  const DASH = BASE + '/dashboard';
+  let currentOffset = 0;
+  let currentTotal = 0;
+  let currentLimit = 50;
+
+  // Client-side sort state
+  let loadedItems = [];
+  let sortField = 'emissionDate';
+  let sortDir = 'desc';
+
+  // Mapeo de campos JS → nombres de campo en la API
+  const SORT_BY_API_MAP = {
+    emissionDate: 'emission_date',
+    nroPol: 'nro_pol',
+  };
+
+  // --- Sort ---
+
+  function setSort(field) {
+    if (sortField === field) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortField = field;
+      sortDir = field === 'emissionDate' ? 'desc' : 'asc';
+    }
+    updateSortIcons();
+    if (field in SORT_BY_API_MAP) {
+      // Campo con soporte server-side — re-fetch desde página 0
+      loadPolicies(0);
+    } else {
+      // Orden client-side para campos sin soporte server-side
+      renderPoliciesTable(sortData(loadedItems));
+    }
+  }
+
+  function sortData(data) {
+    return [...data].sort((a, b) => {
+      let va = a[sortField] ?? '';
+      let vb = b[sortField] ?? '';
+      if (typeof va === 'string') va = va.toLowerCase();
+      if (typeof vb === 'string') vb = vb.toLowerCase();
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  function updateSortIcons() {
+    const fields = ['nroPol', 'ramo', 'emissionDate', 'totalFileCount'];
+    fields.forEach(f => {
+      const el = document.getElementById('sort-' + f);
+      if (!el) return;
+      const th = el.closest('th');
+      if (f === sortField) {
+        el.classList.add('active');
+        el.innerHTML = sortDir === 'asc'
+          ? '<i data-lucide="chevron-up" class="w-3 h-3" aria-hidden="true"></i>'
+          : '<i data-lucide="chevron-down" class="w-3 h-3" aria-hidden="true"></i>';
+        if (th) th.setAttribute('aria-sort', sortDir === 'asc' ? 'ascending' : 'descending');
+      } else {
+        el.classList.remove('active');
+        el.innerHTML = '<i data-lucide="chevrons-up-down" class="w-3 h-3" aria-hidden="true"></i>';
+        if (th) th.setAttribute('aria-sort', 'none');
+      }
+    });
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // --- Filter badge ---
+
+  function updateFilterBadge() {
+    const emission = document.getElementById('f-emission')?.value || '';
+    const start = document.getElementById('f-start')?.value || '';
+    const end = document.getElementById('f-end')?.value || '';
+    const hasFiles = document.getElementById('f-has-files')?.checked;
+    const hasUnavailable = document.getElementById('f-has-unavailable')?.checked;
+    const count = [emission, start, end, hasFiles, hasUnavailable].filter(Boolean).length;
+    const badge = document.getElementById('filter-badge');
+    if (badge) {
+      badge.textContent = count;
+      badge.classList.toggle('hidden', count === 0);
+    }
+  }
+
+  function clearFilters() {
+    document.getElementById('f-nro-pol').value = '';
+    document.getElementById('f-emission').value = '';
+    document.getElementById('f-start').value = '';
+    document.getElementById('f-end').value = '';
+    document.getElementById('f-ramo').value = '';
+    document.getElementById('f-has-files').checked = false;
+    document.getElementById('f-has-unavailable').checked = false;
+    updateFilterBadge();
+    loadPolicies(0);
+  }
+
+  // --- Ramo client-side filter ---
+
+  let _cachedRows = [];
+
+  function filterTableByRamo() {
+    const q = document.getElementById('f-ramo').value.trim().toLowerCase();
+    if (!q) {
+      _cachedRows.forEach(r => r.style.display = '');
+      return;
+    }
+    _cachedRows.forEach(r => {
+      const ramoCell = r.querySelector('td:nth-child(2)');
+      const match = ramoCell && ramoCell.textContent.toLowerCase().includes(q);
+      r.style.display = match ? '' : 'none';
+    });
+  }
+
+  // --- Query builder ---
+
+  function buildQuery(offset) {
+    const params = new URLSearchParams();
+    const emission = document.getElementById('f-emission').value;
+    const start = document.getElementById('f-start').value;
+    const end = document.getElementById('f-end').value;
+    const hasFiles = document.getElementById('f-has-files').checked;
+    const limit = document.getElementById('f-limit').value;
+
+    const hasUnavailable = document.getElementById('f-has-unavailable').checked;
+
+    if (emission) params.set('emission_date', emission);
+    if (start) params.set('start_date', start);
+    if (end) params.set('end_date', end);
+    if (hasFiles) params.set('has_files', 'true');
+    if (hasUnavailable) params.set('has_unavailable', 'true');
+    params.set('limit', limit);
+    params.set('skip', offset);
+    // sort_by y sort_order solo cuando el campo tiene soporte server-side
+    const apiSortBy = SORT_BY_API_MAP[sortField];
+    if (apiSortBy) {
+      params.set('sort_by', apiSortBy);
+      params.set('sort_order', sortDir);
+    } else {
+      params.set('sort_order', 'desc');
+    }
+    return params.toString();
+  }
+
+  // --- Navigation ---
+
+  function goToPolicy() {
+    const nro = document.getElementById('f-nro-pol').value.trim();
+    if (!nro) { showToast('Ingrese un número de póliza', 'error'); return; }
+    window.location.href = DASH + '/policies/' + encodeURIComponent(nro);
+  }
+
+  function prevPage() {
+    const newOffset = Math.max(0, currentOffset - currentLimit);
+    loadPolicies(newOffset);
+  }
+
+  function nextPage() {
+    loadPolicies(currentOffset + currentLimit);
+  }
+
+  // --- Load & render ---
+
+  async function loadPolicies(offset = 0) {
+    currentOffset = offset;
+    currentLimit = parseInt(document.getElementById('f-limit').value);
+    const q = buildQuery(offset);
+
+    const tbody = document.getElementById('pol-body');
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8"><div class="skeleton h-4 w-48 mx-auto"></div></td></tr>';
+
+    const resp = await apiFetch('/policies?' + q);
+    if (!resp || !resp.ok) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8" style="color: var(--color-error);">Error al cargar las pólizas</td></tr>';
+      return;
+    }
+
+    const data = await resp.json();
+    const items = data.data || [];
+    const pag = data.meta || {};
+    currentTotal = pag.total || 0;
+    loadedItems = items;
+
+    // Si el campo tiene soporte server-side, el servidor ya ordenó — no re-ordenar en cliente
+    const sorted = (sortField in SORT_BY_API_MAP) ? loadedItems : sortData(loadedItems);
+    renderPoliciesTable(sorted);
+
+    // Pagination info
+    const from = currentTotal > 0 ? offset + 1 : 0;
+    const to = Math.min(offset + currentLimit, currentTotal);
+    const info = currentTotal > 0 ? `${from}–${to} de ${currentTotal.toLocaleString('es-AR')} pólizas` : 'Sin resultados';
+    document.getElementById('results-info').textContent = info;
+
+    const hasPrev = offset > 0;
+    const hasNext = (offset + currentLimit) < currentTotal;
+    document.getElementById('btn-prev').disabled = !hasPrev;
+    document.getElementById('btn-next').disabled = !hasNext;
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  function renderPoliciesTable(policies) {
+    const tbody = document.getElementById('pol-body');
+    if (!policies.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center py-8" style="color: var(--color-text-muted);">No se encontraron pólizas con los filtros aplicados.</td></tr>';
+      _cachedRows = [];
+      return;
+    }
+    tbody.innerHTML = policies.map(p => `
+      <tr class="cursor-pointer" data-href="${esc(DASH + '/policies/' + encodeURIComponent(p.nroPol))}">
+        <td class="font-mono font-medium" style="color: var(--color-text-primary);">${esc(String(p.nroPol || '—'))}</td>
+        <td class="hidden sm:table-cell">
+          <span class="block truncate max-w-[160px]" title="${esc(p.ramo)}">${esc(p.ramo || '—')}</span>
+        </td>
+        <td class="hidden md:table-cell">${esc(p.insured?.name || '—')}</td>
+        <td class="hidden lg:table-cell">${esc(p.producer?.name || '—')}</td>
+        <td class="text-xs whitespace-nowrap">${formatDateShort(p.emissionDate)}</td>
+        <td class="hidden md:table-cell text-center">${p.endorsementCount ?? 0}</td>
+        <td class="hidden sm:table-cell text-center">
+          ${p.totalFileCount ?? 0}
+          ${(p.unavailableFileCount ?? 0) > 0
+            ? `<span class="ml-1 text-[10px] font-bold px-1 py-0.5 rounded" style="background:var(--color-warning-soft,rgba(234,179,8,.15));color:var(--color-warning);" title="${p.unavailableFileCount} archivo${p.unavailableFileCount===1?'':'s'} no disponible${p.unavailableFileCount===1?'':'s'}">
+                ⚠ ${p.unavailableFileCount}
+               </span>`
+            : ''}
+        </td>
+        <td>${p.allInStorage ? storageBadge(true) : storageBadge(false)}</td>
+      </tr>`).join('');
+    _cachedRows = Array.from(tbody.querySelectorAll('tr'));
+
+    // Re-aplicar filtro de ramo si está activo
+    const ramoQ = document.getElementById('f-ramo').value.trim();
+    if (ramoQ) filterTableByRamo();
+
+    if (window.lucide) lucide.createIcons();
+  }
+
+  // --- Init ---
+
+  updateSortIcons();
+  loadPolicies(0);
+</script>
+{% endblock %}

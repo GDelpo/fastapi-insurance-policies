@@ -1,0 +1,61 @@
+# ============================================================================
+# Polizas Service - Docker Compose (Development)
+# ============================================================================
+
+name: polizas-dev
+
+services:
+  polizas:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: polizas_api
+    ports:
+      - "8082:8082"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+      - SQLSERVER_HOST=${SQLSERVER_HOST:-host.docker.internal}
+      - SQLSERVER_PORT=${SQLSERVER_PORT:-1433}
+      - SQLSERVER_DATABASE=${SQLSERVER_DATABASE:-insurance_core}
+      - SQLSERVER_USER=${SQLSERVER_USER:-polizas_reader}
+      - SQLSERVER_PASSWORD=${SQLSERVER_PASSWORD:-}
+      - SQLSERVER_DRIVER=FreeTDS
+      - SQLSERVER_TDS_VERSION=7.3
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - IDENTITY_SERVICE_URL=${IDENTITY_SERVICE_URL:-http://host.docker.internal:8080/api/v1}
+      - IDENTITY_EXTERNAL_URL=${IDENTITY_EXTERNAL_URL:-http://localhost:8080/api/v1}
+      - CACHE_WARMUP_DAYS=${CACHE_WARMUP_DAYS:-7}
+    volumes:
+      - ../app:/app/app:ro
+      # Policy PDFs (host folder mirroring the UNC share), read-only
+      - ${POLICIES_PDF_HOST_PATH:-../pdfs}:/media/polizas:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - polizas-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: polizas_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - polizas-net
+
+networks:
+  polizas-net:
+    driver: bridge
+
+volumes:
+  redis-data:

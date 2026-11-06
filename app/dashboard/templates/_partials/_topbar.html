@@ -1,0 +1,14 @@
+{# Top bar partial. #}
+<header class="sticky top-0 z-10 backdrop-blur-xl border-b px-6 py-3 flex items-center justify-between" style="background: rgba(11,15,26,.8); border-color: var(--color-border-subtle);">
+  <div>
+    <h1 id="page-title" class="text-lg font-semibold tracking-tight">{{ page_title }}</h1>
+  </div>
+  <div class="flex items-center gap-2">
+    {% block topbar_actions %}
+    <button onclick="refreshCurrentPage()" class="btn btn-ghost text-xs" aria-label="Actualizar página">
+      <i data-lucide="refresh-cw" class="w-3.5 h-3.5" aria-hidden="true"></i>
+      Actualizar
+    </button>
+    {% endblock %}
+  </div>
+</header>

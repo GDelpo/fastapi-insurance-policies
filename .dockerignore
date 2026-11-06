@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Linting/Tools
+.ruff_cache/
+.mypy_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker (avoid recursion)
+docker/
+.dockerignore
+
+# Docs
+*.md

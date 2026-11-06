@@ -1,0 +1,121 @@
+{# Shared JS helpers for Pólizas dashboard. #}
+<script>
+  function _parseDate(dateStr) {
+    // "YYYY-MM-DD" parsed as UTC midnight causes a 1-day shift in ART (UTC-3).
+    // Appending T12:00:00 treats it as local noon, avoiding the timezone rollback.
+    if (!dateStr) return new Date(NaN);
+    return new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00');
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    const d = _parseDate(dateStr);
+    const opts = { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric', hour12: false };
+    const p = new Intl.DateTimeFormat('es-AR', opts).formatToParts(d);
+    const g = (t) => p.find(x => x.type === t)?.value || '';
+    return `${g('hour')}:${g('minute')} ${g('day')}/${g('month')}/${g('year')}`;
+  }
+
+  function formatDateShort(dateStr) {
+    if (!dateStr) return '—';
+    const d = _parseDate(dateStr);
+    const opts = { timeZone: 'America/Argentina/Buenos_Aires', day: '2-digit', month: '2-digit', year: 'numeric' };
+    const p = new Intl.DateTimeFormat('es-AR', opts).formatToParts(d);
+    const g = (t) => p.find(x => x.type === t)?.value || '';
+    return `${g('day')}/${g('month')}/${g('year')}`;
+  }
+
+  function timeAgo(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr);
+    const now = new Date();
+    const secs = Math.floor((now - d) / 1000);
+    if (secs < 60) return 'hace ' + secs + 's';
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return 'hace ' + mins + 'min';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return 'hace ' + hrs + 'h';
+    const days = Math.floor(hrs / 24);
+    if (days < 30) return 'hace ' + days + 'd';
+    return formatDate(dateStr);
+  }
+
+  function esc(s) {
+    // Escapes for HTML text AND quoted attributes (& < > " '): data also lands in attributes.
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Rows rendered with data-href navigate on click (no values interpolated into onclick).
+  document.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-href]');
+    if (row && !e.target.closest('a, button')) window.location.href = row.dataset.href;
+  });
+
+  function healthBadge(status) {
+    const s = (status || 'unknown').toLowerCase();
+    return `<span class="badge badge-${s}">${s}</span>`;
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes && bytes !== 0) return '—';
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  function fileTypeBadge(fileType) {
+    const t = (fileType || 'UNKNOWN').toUpperCase();
+    const map = {
+      'TOASEG': ['badge-toaseg', 'Asegurado'],
+      'TOASEG_CERT': ['badge-toaseg-cert', 'Certificado'],
+      'TOPROD': ['badge-toprod', 'Productor'],
+      'TOORG': ['badge-toorg', 'Organizador'],
+      'UNKNOWN': ['badge-unknown', 'Desconocido'],
+    };
+    const [cls, label] = map[t] || map['UNKNOWN'];
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function storageBadge(inStorage) {
+    if (inStorage) return '<span class="badge badge-storage-yes"><i data-lucide="cloud" class="w-3 h-3"></i> Storage</span>';
+    return '<span class="badge badge-storage-no"><i data-lucide="cloud-off" class="w-3 h-3"></i> Pendiente</span>';
+  }
+
+  function availableBadge(available) {
+    if (available) return '<span class="badge badge-available">Disponible</span>';
+    return '<span class="badge badge-unavailable">No disponible</span>';
+  }
+
+  function boolBadge(val, trueText = 'Sí', falseText = 'No') {
+    if (val) return `<span class="badge badge-storage-yes">${trueText}</span>`;
+    return `<span class="badge badge-storage-no">${falseText}</span>`;
+  }
+
+  function showToast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = 'toast toast-' + type;
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.textContent = msg;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, 3000);
+  }
+
+  /** Get today's date in YYYY-MM-DD format (Argentina timezone) */
+  function todayISO() {
+    const now = new Date();
+    const opts = { timeZone: 'America/Argentina/Buenos_Aires', year: 'numeric', month: '2-digit', day: '2-digit' };
+    const p = new Intl.DateTimeFormat('en-CA', opts).formatToParts(now);
+    const g = (t) => p.find(x => x.type === t)?.value || '';
+    return `${g('year')}-${g('month')}-${g('day')}`;
+  }
+</script>

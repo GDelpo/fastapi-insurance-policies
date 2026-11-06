@@ -1,0 +1,198 @@
+{# Policy detail — full hierarchy: endorsements + files with storage status. #}
+{% extends "shell.html" %}
+{% block page_title %}Póliza {{ nro_pol }}{% endblock %}
+
+{% block page_content %}
+<!-- Back link -->
+<a href="{{ base }}/dashboard/policies" class="inline-flex items-center gap-1 text-xs font-medium mb-4" style="color: var(--color-accent);">
+  <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Volver a pólizas
+</a>
+
+<!-- Policy header card -->
+<div class="card p-5 mb-4" id="pol-header">
+  <div class="flex items-start justify-between">
+    <div>
+      <h2 class="text-xl font-bold font-mono tracking-tight" id="pol-nro">{{ nro_pol }}</h2>
+      <div class="flex flex-wrap items-center gap-3 mt-2 text-sm" style="color: var(--color-text-muted);">
+        <span id="pol-ramo">—</span>
+        <span>•</span>
+        <span>Emisión: <strong id="pol-emission">—</strong></span>
+      </div>
+    </div>
+    <div class="flex gap-2" id="pol-badges"></div>
+  </div>
+</div>
+
+<!-- Insured + Producer cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+  <div class="card p-4">
+    <h4 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color: var(--color-text-muted);">
+      <i data-lucide="user" class="w-3.5 h-3.5 inline"></i> Asegurado
+    </h4>
+    <div class="space-y-1.5 text-sm">
+      <div class="flex justify-between"><span style="color: var(--color-text-muted);">Código</span><span class="font-mono" id="ins-code">—</span></div>
+      <div class="flex justify-between"><span style="color: var(--color-text-muted);">Nombre</span><span id="ins-name">—</span></div>
+      <div class="flex justify-between"><span style="color: var(--color-text-muted);">Email</span><span id="ins-email">—</span></div>
+    </div>
+  </div>
+  <div class="card p-4">
+    <h4 class="text-xs font-semibold uppercase tracking-wider mb-3" style="color: var(--color-text-muted);">
+      <i data-lucide="briefcase" class="w-3.5 h-3.5 inline"></i> Productor
+    </h4>
+    <div class="space-y-1.5 text-sm">
+      <div class="flex justify-between"><span style="color: var(--color-text-muted);">Código</span><span class="font-mono" id="prod-code">—</span></div>
+      <div class="flex justify-between"><span style="color: var(--color-text-muted);">Nombre</span><span id="prod-name">—</span></div>
+      <div class="flex justify-between"><span style="color: var(--color-text-muted);">Email</span><span id="prod-email">—</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Summary stats row -->
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+  <div class="stat-card">
+    <div class="stat-card-header"><span>Endosos</span></div>
+    <div class="stat-card-value" id="det-endorsements">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-header"><span>Archivos</span></div>
+    <div class="stat-card-value" id="det-files">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-header"><span>En Storage</span></div>
+    <div class="stat-card-value" id="det-in-storage">—</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-card-header"><span>No disponibles</span></div>
+    <div class="stat-card-value" id="det-unavailable">—</div>
+  </div>
+</div>
+
+<!-- Endorsements + files -->
+<div id="endorsements-container" class="space-y-3">
+  <div class="card p-5 text-center" style="color: var(--color-text-muted);">Cargando endosos…</div>
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+  // tojson: the value comes from the URL; a quoted '{{ '{{ x }}' }}' would let a backslash break the string.
+  const NRO_POL = {{ nro_pol | tojson }};
+
+  async function loadDetail() {
+    const resp = await apiFetch('/policies/' + encodeURIComponent(NRO_POL));
+    if (!resp) return;
+    if (!resp.ok) {
+      if (resp.status === 404) {
+        document.getElementById('endorsements-container').innerHTML = `
+          <div class="card p-8 text-center">
+            <i data-lucide="search-x" class="w-12 h-12 mx-auto mb-3" style="color: var(--color-text-muted);"></i>
+            <p class="text-lg font-medium">Póliza no encontrada</p>
+            <p class="text-sm mt-1" style="color: var(--color-text-muted);">No se encontró la póliza <strong class="font-mono">${esc(NRO_POL)}</strong></p>
+          </div>`;
+        lucide.createIcons();
+        return;
+      }
+      showToast('Error al cargar la póliza', 'error');
+      return;
+    }
+
+    const p = await resp.json();
+
+    // Header
+    document.getElementById('pol-ramo').textContent = p.ramo || '—';
+    document.getElementById('pol-emission').textContent = formatDateShort(p.emissionDate);
+
+    // Badges
+    const badges = [];
+    if (p.allInStorage) badges.push(storageBadge(true));
+    else badges.push(storageBadge(false));
+    if (p.hasFiles) badges.push(boolBadge(true, 'Con archivos'));
+    document.getElementById('pol-badges').innerHTML = badges.join(' ');
+
+    // Insured
+    if (p.insured) {
+      document.getElementById('ins-code').textContent = p.insured.code || '—';
+      document.getElementById('ins-name').textContent = p.insured.name || '—';
+      document.getElementById('ins-email').textContent = p.insured.email || '—';
+    }
+
+    // Producer
+    if (p.producer) {
+      document.getElementById('prod-code').textContent = p.producer.code || '—';
+      document.getElementById('prod-name').textContent = p.producer.name || '—';
+      document.getElementById('prod-email').textContent = p.producer.email || '—';
+    }
+
+    // Stats
+    const endorsements = p.endorsements || [];
+    let totalFiles = 0, inStorage = 0, unavailable = 0;
+    endorsements.forEach(e => (e.files || []).forEach(f => {
+      totalFiles++;
+      if (f.inStorage) inStorage++;
+      if (!f.available) unavailable++;
+    }));
+
+    document.getElementById('det-endorsements').textContent = endorsements.length;
+    document.getElementById('det-files').textContent = totalFiles;
+    document.getElementById('det-in-storage').textContent = inStorage;
+    document.getElementById('det-unavailable').textContent = unavailable;
+
+    // Endorsements list
+    const container = document.getElementById('endorsements-container');
+    if (endorsements.length === 0) {
+      container.innerHTML = '<div class="card p-5 text-center" style="color: var(--color-text-muted);">Sin endosos</div>';
+      return;
+    }
+
+    container.innerHTML = endorsements.map((e, idx) => {
+      const files = e.files || [];
+      const filesHtml = files.length > 0 ? `
+        <table class="data-table mt-2">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Tipo</th>
+              <th>Disponible</th>
+              <th>Storage</th>
+              <th>Fecha creación</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${files.map(f => `
+              <tr>
+                <td class="font-mono text-xs">${esc(f.name)}</td>
+                <td>${fileTypeBadge(f.fileType)}</td>
+                <td>${availableBadge(f.available)}</td>
+                <td>${f.inStorage
+                  ? (f.storageLink && /^https?:\/\//i.test(f.storageLink)
+                    ? `<a href="${esc(f.storageLink)}" target="_blank" rel="noopener noreferrer" class="badge badge-storage-yes"><i data-lucide="external-link" class="w-3 h-3"></i> Storage</a>`
+                    : storageBadge(true))
+                  : storageBadge(false)}</td>
+                <td class="text-xs">${formatDate(f.createdAt)}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      ` : '<p class="text-xs mt-2" style="color: var(--color-text-muted);">Sin archivos en este endoso</p>';
+
+      return `
+        <div class="card p-4">
+          <div class="flex items-center justify-between mb-1">
+            <h4 class="text-sm font-semibold">
+              <i data-lucide="file-stack" class="w-4 h-4 inline" style="color: var(--color-accent);"></i>
+              Endoso #${e.nroEndoso}
+            </h4>
+            <div class="flex items-center gap-3 text-xs" style="color: var(--color-text-muted);">
+              <span>Emisión: ${formatDateShort(e.emissionDate)}</span>
+              <span>${files.length} archivo${files.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+          ${filesHtml}
+        </div>`;
+    }).join('');
+
+    setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 100);
+  }
+
+  loadDetail();
+</script>
+{% endblock %}
